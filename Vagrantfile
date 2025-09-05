@@ -1,0 +1,78 @@
+# -*- mode: ruby -*-
+# vi: set ft=ruby :
+
+# RHCSA practice lab — two Rocky Linux 9 machines
+Vagrant.configure("2") do |config|
+  # -------------------------------------------------------------
+  # Base box: maintained by the Rocky Linux project
+  # Version 6.x corresponds to Rocky 9.6; using >= keeps you on 9.6+
+  # -------------------------------------------------------------
+  config.vm.box         = "generic/rocky9"
+  #config.vm.box_version = ">= 6.0.0"
+
+  # -----------------------------------------------------------------
+  # Disable the default /vagrant shared folder (no vboxsf / GuestAdditions)
+  # -----------------------------------------------------------------
+  config.vm.synced_folder '.', '/vagrant', disabled: true
+
+  # -------------------------------------------------------------
+  # Define both nodes in a DRY loop
+  # -------------------------------------------------------------
+  {
+    "server" => {
+      ip:    "192.168.56.10",
+      mem:   2048,
+      cpus:  2,
+      pkgs:  "httpd firewalld policycoreutils-python-utils",
+      setup: <<-SHELL
+        systemctl enable --now httpd firewalld
+        firewall-cmd --permanent --add-service=http
+        firewall-cmd --reload
+        setsebool -P httpd_can_network_connect on
+      SHELL
+    },
+    "client" => {
+      ip:    "192.168.56.11",
+      mem:   1024,
+      cpus:  1,
+      pkgs:  "curl lynx",
+      setup: ""
+    }
+  }.each do |name, opts|
+    config.vm.define name do |vm|
+      vm.vm.hostname = "#{name}.rhcsa.lab"
+      vm.vm.network  "private_network", ip: opts[:ip]
+
+      vm.vm.provider "virtualbox" do |vb|
+        vb.memory = opts[:mem]
+        vb.cpus   = opts[:cpus]
+        # Add extra disk for LVM/swap practice only on the server
+#        if name == "server"
+#          vb.customize ["createhd", "--filename", "disk1.vdi", "--size", 1024] # Size in MB (1 GB)
+#          vb.customize ["storageattach", :id, "--storagectl", "SATA Controller",
+#                        "--port", 1, "--device", 0, "--type", "hdd", "--medium", "disk1.vdi"]
+#        end
+        if name == "server"
+          disk_path = File.join(Dir.pwd, "disk1.vdi")
+      
+          # Create the disk only once
+          unless File.exist?(disk_path)
+            vb.customize ["createhd", "--filename", disk_path, "--size", 1024] # MB
+          end
+      
+          vb.customize ["storageattach", :id, "--storagectl", "SATA Controller",
+                        "--port", 1, "--device", 0, "--type", "hdd", "--medium", disk_path]
+        end
+      end
+
+      vm.vm.provision "shell", privileged: true, inline: <<-SHELL
+        # Always ensure SSH server is present and running
+        dnf -qy install openssh-server
+        systemctl enable --now sshd
+
+        dnf -qy install #{opts[:pkgs]}
+        #{opts[:setup]}
+      SHELL
+    end
+  end
+end
