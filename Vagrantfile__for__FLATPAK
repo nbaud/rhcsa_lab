@@ -1,0 +1,35 @@
+# -*- mode: ruby -*-
+# vi: set ft=ruby :
+
+Vagrant.configure("2") do |config|
+  # Your desktop box
+  config.vm.box         = "rocky-linux-9-desktop/rocky-linux-9-desktop"
+  config.vm.box_version = "1.0"
+
+  # Avoid VirtualBox shared-folder quirks
+  config.vm.synced_folder ".", "/vagrant", disabled: true
+  # Or use rsync:
+  # config.vm.synced_folder ".", "/vagrant", type: "rsync"
+
+  # Show GUI and give resources
+  config.vm.provider :virtualbox do |vb|
+    vb.gui     = true
+    vb.cpus    = 2
+    vb.memory  = 4096
+    vb.name    = "rhcsa-rocky9-desktop"
+    vb.customize ["modifyvm", :id, "--graphicscontroller", "VMSVGA"]
+    vb.customize ["modifyvm", :id, "--vram", "64"]
+  end
+
+  # Optional private network
+  # config.vm.network "private_network", ip: "172.16.1.50"
+
+  # Minimal provisioning: set locales to US English
+  config.vm.provision "shell", privileged: true, inline: <<'SH'
+set -euxo pipefail
+dnf -qy install glibc-langpack-en
+localectl set-locale LANG=en_US.UTF-8 LANGUAGE=en_US
+# Fallback in case localectl isn't available for some reason:
+grep -q '^LANG=' /etc/locale.conf || echo 'LANG=en_US.UTF-8' >> /etc/locale.conf
+SH
+end
