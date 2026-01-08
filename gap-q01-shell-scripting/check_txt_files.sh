@@ -21,7 +21,7 @@ for DIR in "${DIRS[@]}"; do
         continue
     fi
 
-    FILES=$(find "$DIR" -maxdepth 1 -name "*.txt")
+    FILES=$(find "$DIR" -maxdepth 1 -name "*.txt" | sort)
 
     if [ -z "$FILES" ]; then
         echo "No text files found in $DIR" >> "$OUTPUT"
