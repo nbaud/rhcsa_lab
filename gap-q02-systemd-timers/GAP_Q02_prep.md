@@ -1,6 +1,4 @@
-//////////////////////////////////////////////////////////////////
 RHCSA Bonus Gap Q02 Preparation: Systemd Timers
-//////////////////////////////////////////////////////////////////
 
 In this preparation step, you must create the scripts and a background timer that will populate files for your lab.
 
@@ -42,6 +40,7 @@ Description=Populate files every minute
 
 [Timer]
 OnCalendar=*:*:00
+AccuracySec=1s
 Persistent=true
 
 [Install]
