@@ -1,0 +1,67 @@
+# -*- mode: ruby -*-
+# vi: set ft=ruby :
+
+# RHCSA practice lab — two Rocky Linux 10 machines
+Vagrant.configure("2") do |config|
+  config.vm.box = "rockylinux/10"
+  config.vm.box_url = "https://dl.rockylinux.org/pub/rocky/10/images/x86_64/Rocky-10-Vagrant-Vbox.latest.x86_64.box"
+  config.vm.synced_folder '.', '/vagrant', disabled: true
+  {
+    "server" => {
+      ip:    "172.16.1.13",
+      mem:   2048,
+      cpus:  2,
+      pkgs:  "httpd firewalld policycoreutils-python-utils",
+      setup: <<-SHELL
+        systemctl enable --now httpd firewalld
+        firewall-cmd --permanent --add-service=http
+        firewall-cmd --permanent --add-service=ssh
+        firewall-cmd --reload
+        setsebool -P httpd_can_network_connect on
+      SHELL
+    },
+    "client" => {
+      ip:    "172.16.1.12",
+      mem:   1024,
+      cpus:  1,
+      pkgs:  "curl lynx firewalld",
+      setup: <<-SHELL
+        systemctl enable --now firewalld
+        firewall-cmd --permanent --add-service=ssh
+        firewall-cmd --reload
+      SHELL
+    }
+  }.each do |name, opts|
+    config.vm.define name do |vm|
+      vm.vm.hostname = "#{name}.rhcsa.lab"
+      vm.vm.network  "private_network",
+        ip: opts[:ip],
+        netmask: "255.255.255.0",
+        virtualbox__hostonly: "vboxnet3"
+
+      vm.vm.provider "virtualbox" do |vb|
+        vb.memory = opts[:mem]
+        vb.cpus   = opts[:cpus]
+        if name == "server"
+          disk_path = File.join(Dir.pwd, "disk1.vdi")
+
+          unless File.exist?(disk_path)
+            vb.customize ["createhd", "--filename", disk_path, "--size", 1024]
+          end
+
+          vb.customize ["storageattach", :id, "--storagectl", "SATA Controller",
+                        "--port", 1, "--device", 0, "--type", "hdd", "--medium", disk_path]
+        end
+      end
+
+      vm.vm.provision "shell", privileged: true, inline: <<-SHELL
+        # Always ensure SSH server is present and running
+        dnf -qy install openssh-server
+        systemctl enable --now sshd
+
+        dnf -qy install #{opts[:pkgs]}
+        #{opts[:setup]}
+      SHELL
+    end
+  end
+end
