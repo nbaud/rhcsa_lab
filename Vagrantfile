@@ -20,38 +20,41 @@ Vagrant.configure("2") do |config|
   # -------------------------------------------------------------
   {
     "server" => {
-      ip:    "192.168.56.10",
+      ip:    "172.16.1.13",
       mem:   2048,
       cpus:  2,
       pkgs:  "httpd firewalld policycoreutils-python-utils",
       setup: <<-SHELL
         systemctl enable --now httpd firewalld
         firewall-cmd --permanent --add-service=http
+        firewall-cmd --permanent --add-service=ssh
         firewall-cmd --reload
         setsebool -P httpd_can_network_connect on
       SHELL
     },
     "client" => {
-      ip:    "192.168.56.11",
+      ip:    "172.16.1.12",
       mem:   1024,
       cpus:  1,
-      pkgs:  "curl lynx",
-      setup: ""
+      pkgs:  "curl lynx firewalld",
+      setup: <<-SHELL
+        systemctl enable --now firewalld
+        firewall-cmd --permanent --add-service=ssh
+        firewall-cmd --reload
+      SHELL
     }
   }.each do |name, opts|
     config.vm.define name do |vm|
       vm.vm.hostname = "#{name}.rhcsa.lab"
-      vm.vm.network  "private_network", ip: opts[:ip]
+      vm.vm.network  "private_network",
+        ip: opts[:ip],
+        netmask: "255.255.255.0",
+        virtualbox__hostonly: "vboxnet3"
 
       vm.vm.provider "virtualbox" do |vb|
         vb.memory = opts[:mem]
         vb.cpus   = opts[:cpus]
         # Add extra disk for LVM/swap practice only on the server
-#        if name == "server"
-#          vb.customize ["createhd", "--filename", "disk1.vdi", "--size", 1024] # Size in MB (1 GB)
-#          vb.customize ["storageattach", :id, "--storagectl", "SATA Controller",
-#                        "--port", 1, "--device", 0, "--type", "hdd", "--medium", "disk1.vdi"]
-#        end
         if name == "server"
           disk_path = File.join(Dir.pwd, "disk1.vdi")
       
