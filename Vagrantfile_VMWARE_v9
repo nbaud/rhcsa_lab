@@ -1,0 +1,95 @@
+# -*- mode: ruby -*-
+# vi: set ft=ruby :
+
+# RHCSA practice lab — two Rocky Linux 9 machines on VMware
+
+# NOTE:
+# On VMware (unlike on Virtualbox), an extra lab disk for the server is added manually in VMware Workstation,
+# not through this Vagrantfile.
+#
+# The original boot disk from the box is the 64 GB SATA disk. Adding a second disk the
+# wrong way can break boot and cause PXE / "Operating System not found".
+#
+# Safe workflow for adding an extra lab disk to server:
+#   1. Run: vagrant up server
+#   2. If needed, open/register the server VM manually in VMware Workstation
+#   3. Run: vagrant halt server
+#   4. In VMware Workstation, open server settings
+#   5. Verify the original 64 GB NVMe boot disk is present and untouched
+#   6. Click Add...
+#   7. Select Hard Disk
+#   8. Select SATA as the disk type
+#   9. Choose "Create a new virtual disk"
+#  10. Set the disk size to 2 GB
+#  11. Leave "Allocate all disk space now" unchecked
+#  12. Select "Store virtual disk as a single file"
+#  13. Finish the wizard and save the VM settings
+#  14. Run: vagrant up server
+#  15. Inside the guest, verify the new disk with: lsblk
+#
+# If the VM becomes unbootable after adding a disk, remove the manually added disk first.
+
+Vagrant.configure("2") do |config|
+  # VMware-compatible Rocky 9 box
+  config.vm.box = "bento/rockylinux-9"
+
+  # Disable default shared folder
+  config.vm.synced_folder ".", "/vagrant", disabled: true
+
+  {
+    "server" => {
+      ip:    "172.16.1.13",
+      mem:   2048,
+      cpus:  2,
+      pkgs:  "httpd firewalld policycoreutils-python-utils",
+      setup: <<-SHELL
+        systemctl enable --now httpd firewalld
+        firewall-cmd --permanent --add-service=http
+        firewall-cmd --permanent --add-service=ssh
+        firewall-cmd --reload
+        setsebool -P httpd_can_network_connect on
+      SHELL
+    },
+    "client" => {
+      ip:    "172.16.1.12",
+      mem:   1024,
+      cpus:  1,
+      pkgs:  "curl lynx firewalld",
+      setup: <<-SHELL
+        systemctl enable --now firewalld
+        firewall-cmd --permanent --add-service=ssh
+        firewall-cmd --reload
+      SHELL
+    }
+  }.each do |name, opts|
+    config.vm.define name do |vm|
+      vm.vm.hostname = "#{name}.rhcsa.lab"
+
+      vm.vm.network "private_network",
+        ip: opts[:ip],
+        netmask: "255.255.255.0"
+
+      vm.vm.provider "vmware_desktop" do |v|
+        v.vmx["displayName"] = "#{name}.rhcsa.lab"
+        v.vmx["memsize"]     = opts[:mem].to_s
+        v.vmx["numvcpus"]    = opts[:cpus].to_s
+
+        # Important on Linux when Vagrant wrongly behaves as if VMware Player is in use
+        v.force_vmware_license = "workstation"
+
+        # Avoid clone/snapshot trouble for first tests
+        v.linked_clone = false
+      end
+
+      vm.vm.provision "shell", privileged: true, inline: <<-SHELL
+        set -e
+
+        dnf -qy install openssh-server
+        systemctl enable --now sshd
+
+        dnf -qy install #{opts[:pkgs]}
+        #{opts[:setup]}
+      SHELL
+    end
+  end
+end
