@@ -4,7 +4,7 @@
 # RHCSA practice lab — two Rocky Linux 10 machines
 Vagrant.configure("2") do |config|
   config.vm.box = "rockylinux/10"
-  config.vm.box_url = "https://dl.rockylinux.org/pub/rocky/10/images/x86_64/Rocky-10-Vagrant-Vbox.latest.x86_64.box"
+  config.vm.box_url = "https://dl.rockylinux.org/pub/rocky/10/images/x86_64/Rocky-10-Vagrant-Vbox.latest.x86_64.vagrant.virtualbox.box"
   config.vm.synced_folder '.', '/vagrant', disabled: true
   {
     "server" => {
